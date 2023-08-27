@@ -153,12 +153,15 @@ describe('Post\'s', () => {
         }
     });
 
-    it('should return falsy if post does not exist', (done) => {
-        posts.getPostData(9999, (err, postData) => {
-            assert.ifError(err);
-            assert.equal(postData, null);
-            done();
-        });
+    it('should return falsy if post does not exist', async () => {
+        try {
+            await posts.getPostData(9999, (err, postData) => {
+                assert.ifError(err);
+                assert.equal(postData, null);
+            });
+        } catch (err) {
+            assert(false);
+        }
     });
 
     describe('voting', () => {
@@ -848,32 +851,41 @@ describe('Post\'s', () => {
             }
         });
 
-        it('should fail to get raw post because of privilege', (done) => {
-            socketPosts.getRawPost({ uid: 0 }, pid, (err) => {
-                assert.equal(err.message, '[[error:no-privileges]]');
-                done();
-            });
-        });
-
-        it('should fail to get raw post because post is deleted', (done) => {
-            posts.setPostField(pid, 'deleted', 1, (err) => {
-                assert.ifError(err);
-                socketPosts.getRawPost({ uid: voterUid }, pid, (err) => {
-                    assert.equal(err.message, '[[error:no-post]]');
-                    done();
+        it('should fail to get raw post because of privilege', async () => {
+            try {
+                await socketPosts.getRawPost({ uid: 0 }, pid, (err) => {
+                    assert.equal(err.message, '[[error:no-privileges]]');
                 });
-            });
+            } catch (err) {
+                assert(false);
+            }
         });
 
-        it('should get raw post content', (done) => {
-            posts.setPostField(pid, 'deleted', 0, (err) => {
-                assert.ifError(err);
-                socketPosts.getRawPost({ uid: voterUid }, pid, (err, postContent) => {
+        it('should fail to get raw post because post is deleted', async () => {
+            try {
+                await posts.setPostField(pid, 'deleted', 1, (err) => {
                     assert.ifError(err);
-                    assert.equal(postContent, 'raw content');
-                    done();
+                    socketPosts.getRawPost({ uid: voterUid }, pid, (err) => {
+                        assert.equal(err.message, '[[error:no-post]]');
+                    });
                 });
-            });
+            } catch (err) {
+                assert(false);
+            }
+        });
+
+        it('should get raw post content', async () => {
+            try {
+                await posts.setPostField(pid, 'deleted', 0, (err) => {
+                    assert.ifError(err);
+                    socketPosts.getRawPost({ uid: voterUid }, pid, (err, postContent) => {
+                        assert.ifError(err);
+                        assert.equal(postContent, 'raw content');
+                    });
+                });
+            } catch (err) {
+                assert(false);
+            }
         });
 
         it('should get post', async () => {
@@ -881,19 +893,25 @@ describe('Post\'s', () => {
             assert(postData);
         });
 
-        it('should get post category', (done) => {
-            socketPosts.getCategory({ uid: voterUid }, pid, (err, postCid) => {
-                assert.ifError(err);
-                assert.equal(cid, postCid);
-                done();
-            });
+        it('should get post category', async () => {
+            try {
+                await socketPosts.getCategory({ uid: voterUid }, pid, (err, postCid) => {
+                    assert.ifError(err);
+                    assert.equal(cid, postCid);
+                });
+            } catch (err) {
+                assert(false);
+            }
         });
 
-        it('should error with invalid data', (done) => {
-            socketPosts.getPidIndex({ uid: voterUid }, null, (err) => {
-                assert.equal(err.message, '[[error:invalid-data]]');
-                done();
-            });
+        it('should error with invalid data', async () => {
+            try {
+                await socketPosts.getPidIndex({ uid: voterUid }, null, (err) => {
+                    assert.equal(err.message, '[[error:invalid-data]]');
+                });
+            } catch (err) {
+                assert(false);
+            }
         });
 
         it('should get pid index', (done) => {
@@ -1098,7 +1116,7 @@ describe('Post\'s', () => {
             const oldValue = meta.config.groupsExemptFromPostQueue;
             meta.config.groupsExemptFromPostQueue = ['registered-users'];
             const uid = await user.create({ username: 'mergeexemptuser' });
-            const result = await apiTopics.create({ uid: uid, emit: () => {} }, { title: 'should not be queued', content: 'topic content', cid: cid });
+            const result = await apiTopics.create({ uid: uid, emit: () => { } }, { title: 'should not be queued', content: 'topic content', cid: cid });
             assert.strictEqual(result.title, 'should not be queued');
             meta.config.groupsExemptFromPostQueue = oldValue;
         });
