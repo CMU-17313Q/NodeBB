@@ -18,4 +18,7 @@ export type PostObject = {
   category: CategoryObject;
   isMainPost: boolean;
   replies: number;
+  editedISO: string;
+  edited: number;
+
 };
