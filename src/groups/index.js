@@ -22,6 +22,7 @@ require('./join')(Groups);
 require('./leave')(Groups);
 require('./cache')(Groups);
 
+
 Groups.BANNED_USERS = 'banned-users';
 
 Groups.ephemeralGroups = ['guests', 'spiders'];
