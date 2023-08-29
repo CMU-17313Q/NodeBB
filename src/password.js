@@ -1,81 +1,164 @@
-'use strict';
-
-const path = require('path');
-const crypto = require('crypto');
-const util = require('util');
-
-const bcrypt = require('bcryptjs');
-
-const fork = require('./meta/debugFork');
-
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.compare = exports.hash = void 0;
+const path = __importStar(require("path"));
+const crypto = __importStar(require("crypto"));
+const bcrypt = __importStar(require("bcryptjs"));
+const child_process_1 = require("child_process");
 function forkChild(message, callback) {
-    const child = fork(path.join(__dirname, 'password'));
-
+    const child = (0, child_process_1.fork)(path.join(__dirname, 'password'));
     child.on('message', (msg) => {
-        callback(msg.err ? new Error(msg.err) : null, msg.result);
+        const { err, result } = msg;
+        const error = err ? new Error(err) : null;
+        callback(error, result);
     });
     child.on('error', (err) => {
         console.error(err.stack);
-        callback(err);
+        callback(err, undefined);
     });
-
     child.send(message);
 }
-
-const forkChildAsync = util.promisify(forkChild);
-
-exports.hash = async function (rounds, password) {
-    password = crypto.createHash('sha512').update(password).digest('hex');
-    return await forkChildAsync({ type: 'hash', rounds: rounds, password: password });
-};
-
-exports.compare = async function (password, hash, shaWrapped) {
-    const fakeHash = await getFakeHash();
-
-    if (shaWrapped) {
-        password = crypto.createHash('sha512').update(password).digest('hex');
-    }
-
-    return await forkChildAsync({ type: 'compare', password: password, hash: hash || fakeHash });
-};
-
+async function forkChildAsync(message) {
+    return new Promise((resolve, reject) => {
+        const child = (0, child_process_1.fork)(path.join(__dirname, 'password'));
+        child.on('message', (msg) => {
+            const { err, result } = msg;
+            if (err) {
+                reject(new Error(err));
+            }
+            else {
+                resolve(result);
+            }
+        });
+        child.on('error', (err) => {
+            console.error(err.stack);
+            reject(err);
+        });
+        child.send(message);
+    });
+}
+async function hash(rounds, password) {
+    const hashedPassword = crypto.createHash('sha512').update(password).digest('hex');
+    return await forkChildAsync({ type: 'hash', rounds: rounds, password: hashedPassword });
+}
+exports.hash = hash;
 let fakeHashCache;
+let fakeHashPromise = null;
 async function getFakeHash() {
     if (fakeHashCache) {
         return fakeHashCache;
     }
-    fakeHashCache = await exports.hash(12, Math.random().toString());
+    if (fakeHashPromise === null) {
+        try {
+            fakeHashPromise = hash(12, Math.random().toString());
+            const resolvedFakeHashPromise = await fakeHashPromise;
+            fakeHashCache = resolvedFakeHashPromise;
+            fakeHashPromise = null;
+            return fakeHashCache;
+        }
+        catch (error) {
+            console.error(error);
+            throw error;
+        }
+    }
     return fakeHashCache;
 }
-
-// child process
-process.on('message', (msg) => {
-    if (msg.type === 'hash') {
-        tryMethod(hashPassword, msg);
-    } else if (msg.type === 'compare') {
-        tryMethod(compare, msg);
-    }
-});
-
-async function tryMethod(method, msg) {
+async function compare(password, hash, shaWrapped) {
     try {
-        const result = await method(msg);
-        process.send({ result: result });
-    } catch (err) {
-        process.send({ err: err.message });
-    } finally {
-        process.disconnect();
+        const fakeHash = await getFakeHash();
+        if (shaWrapped) {
+            password = crypto.createHash('sha512').update(password).digest('hex');
+        }
+        const message = { type: 'compare', password, hash: hash || fakeHash };
+        return new Promise((resolve, reject) => {
+            forkChild(message, (err, result) => {
+                if (err) {
+                    console.error(err);
+                    reject(err);
+                }
+                else {
+                    resolve(result);
+                }
+            });
+        });
+    }
+    catch (error) {
+        console.error(error);
+        throw error;
     }
 }
-
+exports.compare = compare;
 async function hashPassword(msg) {
-    const salt = await bcrypt.genSalt(parseInt(msg.rounds, 10));
+    const salt = await bcrypt.genSalt(parseInt(msg.rounds.toString(), 10));
     const hash = await bcrypt.hash(msg.password, salt);
     return hash;
 }
-
-async function compare(msg) {
-    return await bcrypt.compare(String(msg.password || ''), String(msg.hash || ''));
+async function comparePasswords(msg) {
+    return await bcrypt.compare(msg.password || '', msg.hash || '');
 }
-
-require('./promisify')(exports);
+function sendResult(result) {
+    if (result !== undefined) {
+        process.send({ result });
+    }
+}
+function sendError(error) {
+    process.send({ err: error.message });
+}
+async function tryMethod(method, msg) {
+    try {
+        return await method(msg);
+    }
+    catch (err) {
+        console.error(err);
+        throw err;
+    }
+}
+async function handleAsyncOperation(msg) {
+    try {
+        if (msg.type === 'hash') {
+            const result = await tryMethod(hashPassword, msg);
+            sendResult(result);
+        }
+        else if (msg.type === 'compare') {
+            const result = await tryMethod(comparePasswords, msg);
+            sendResult(result);
+        }
+    }
+    catch (err) {
+        console.error(err);
+        sendError(err);
+    }
+    finally {
+        setImmediate(() => {
+            process.disconnect();
+        });
+    }
+}
+process.on('message', (msg) => {
+    handleAsyncOperation(msg).catch((err) => {
+        console.error(err);
+    });
+});
