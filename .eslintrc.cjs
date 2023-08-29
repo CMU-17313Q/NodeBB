@@ -62,6 +62,7 @@ function find_compiled_js() {
                     project: "./tsconfig.json"
                 },
                 rules: {
+                    'linebreak-style': 'off',
                     "no-use-before-define": "off",
                     "@typescript-eslint/no-use-before-define": "error",			
                 }

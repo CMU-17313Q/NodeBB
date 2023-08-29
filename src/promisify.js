@@ -1,61 +1,56 @@
-'use strict';
-
-const util = require('util');
-
-module.exports = function (theModule, ignoreKeys) {
-    ignoreKeys = ignoreKeys || [];
-    function isCallbackedFunction(func) {
-        if (typeof func !== 'function') {
-            return false;
-        }
-        const str = func.toString().split('\n')[0];
-        return str.includes('callback)');
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.isCallbackedFunction = void 0;
+const util_1 = __importDefault(require("util"));
+/*
+             eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
+              @typescript-eslint/no-explicit-any
+             */
+function isCallbackedFunction(func) {
+    if (typeof func !== 'function') {
+        return false;
     }
-
-    function isAsyncFunction(fn) {
-        return fn && fn.constructor && fn.constructor.name === 'AsyncFunction';
-    }
-
+    const str = func.toString().split('\n')[0];
+    return str.includes('callback)');
+}
+exports.isCallbackedFunction = isCallbackedFunction;
+function wrapCallback(origFn) {
+    return util_1.default.promisify(origFn);
+}
+function promisifyModule(theModule, ignoreKeys = []) {
     function promisifyRecursive(module) {
-        if (!module) {
-            return;
-        }
-
         const keys = Object.keys(module);
         keys.forEach((key) => {
             if (ignoreKeys.includes(key)) {
                 return;
             }
-            if (isAsyncFunction(module[key])) {
-                module[key] = wrapCallback(module[key], util.callbackify(module[key]));
-            } else if (isCallbackedFunction(module[key])) {
-                module[key] = wrapPromise(module[key], util.promisify(module[key]));
-            } else if (typeof module[key] === 'object') {
+            /*
+            eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
+            @typescript-eslint/no-unsafe-argument
+            */
+            if (isCallbackedFunction(module[key])) {
+                /*
+                eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
+                @typescript-eslint/no-unsafe-argument
+                */
+                module[key] = wrapCallback(module[key]);
+                /*
+                eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
+                @typescript-eslint/no-unsafe-argument
+                */
+            }
+            else if (typeof module[key] === 'object' && module[key] !== null) {
+                /*
+                eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
+                @typescript-eslint/no-unsafe-argument
+                */
                 promisifyRecursive(module[key]);
             }
         });
     }
-
-    function wrapCallback(origFn, callbackFn) {
-        return async function wrapperCallback(...args) {
-            if (args.length && typeof args[args.length - 1] === 'function') {
-                const cb = args.pop();
-                args.push((err, res) => (res !== undefined ? cb(err, res) : cb(err)));
-                return callbackFn(...args);
-            }
-            return origFn(...args);
-        };
-    }
-
-    function wrapPromise(origFn, promiseFn) {
-        return function wrapperPromise(...args) {
-            if (args.length && typeof args[args.length - 1] === 'function') {
-                return origFn(...args);
-            }
-
-            return promiseFn(...args);
-        };
-    }
-
     promisifyRecursive(theModule);
-};
+}
+exports.default = promisifyModule;
