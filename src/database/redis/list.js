@@ -1,5 +1,5 @@
 'use strict';
-
+//from JS to TS
 module.exports = function (module) {
     const helpers = require('./helpers');
 
