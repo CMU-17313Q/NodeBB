@@ -1,37 +1,37 @@
-'use strict';
-
-const fs = require('fs');
-const childProcess = require('child_process');
-const chalk = require('chalk');
-
-const fork = require('../meta/debugFork');
-const { paths } = require('../constants');
-
-const cwd = paths.baseDir;
-
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.log = exports.status = exports.restart = exports.stop = exports.start = exports.getRunningPid = void 0;
+const fs_1 = __importDefault(require("fs"));
+const child_process_1 = __importDefault(require("child_process"));
+const chalk_1 = __importDefault(require("chalk"));
+const debugFork_1 = __importDefault(require("../meta/debugFork"));
+const constants_1 = require("../constants");
+const cwd = constants_1.paths.baseDir;
 function getRunningPid(callback) {
-    fs.readFile(paths.pidfile, {
+    fs_1.default.readFile(constants_1.paths.pidfile, {
         encoding: 'utf-8',
     }, (err, pid) => {
         if (err) {
-            return callback(err);
+            return callback(err, null);
         }
-
-        pid = parseInt(pid, 10);
-
+        const parsed = parseInt(pid, 10);
         try {
-            process.kill(pid, 0);
-            callback(null, pid);
-        } catch (e) {
-            callback(e);
+            process.kill(parsed, 0);
+            callback(null, parsed);
+        }
+        catch (e) {
+            callback(e, null);
         }
     });
 }
-
+exports.getRunningPid = getRunningPid;
 function start(options) {
     if (options.dev) {
         process.env.NODE_ENV = 'development';
-        fork(paths.loader, ['--no-daemon', '--no-silent'], {
+        (0, debugFork_1.default)(constants_1.paths.loader, ['--no-daemon', '--no-silent'], {
             env: process.env,
             stdio: 'inherit',
             cwd,
@@ -40,86 +40,82 @@ function start(options) {
     }
     if (options.log) {
         console.log(`\n${[
-            chalk.bold('Starting NodeBB with logging output'),
-            chalk.red('Hit ') + chalk.bold('Ctrl-C ') + chalk.red('to exit'),
+            chalk_1.default.bold('Starting NodeBB with logging output'),
+            chalk_1.default.red('Hit ') + chalk_1.default.bold('Ctrl-C ') + chalk_1.default.red('to exit'),
             'The NodeBB process will continue to run in the background',
-            `Use "${chalk.yellow('./nodebb stop')}" to stop the NodeBB server`,
-        ].join('\n')}`);
-    } else if (!options.silent) {
-        console.log(`\n${[
-            chalk.bold('Starting NodeBB'),
-            `  "${chalk.yellow('./nodebb stop')}" to stop the NodeBB server`,
-            `  "${chalk.yellow('./nodebb log')}" to view server output`,
-            `  "${chalk.yellow('./nodebb help')}" for more commands\n`,
+            `Use "${chalk_1.default.yellow('./nodebb stop')}" to stop the NodeBB server`,
         ].join('\n')}`);
     }
-
+    else if (!options.silent) {
+        console.log(`\n${[
+            chalk_1.default.bold('Starting NodeBB'),
+            `  "${chalk_1.default.yellow('./nodebb stop')}" to stop the NodeBB server`,
+            `  "${chalk_1.default.yellow('./nodebb log')}" to view server output`,
+            `  "${chalk_1.default.yellow('./nodebb help')}" for more commands\n`,
+        ].join('\n')}`);
+    }
     // Spawn a new NodeBB process
-    const child = fork(paths.loader, process.argv.slice(3), {
+    const child = (0, debugFork_1.default)(constants_1.paths.loader, process.argv.slice(3), {
         env: process.env,
         cwd,
     });
     if (options.log) {
-        childProcess.spawn('tail', ['-F', './logs/output.log'], {
+        child_process_1.default.spawn('tail', ['-F', './logs/output.log'], {
             stdio: 'inherit',
             cwd,
         });
     }
-
     return child;
 }
-
+exports.start = start;
 function stop() {
     getRunningPid((err, pid) => {
         if (!err) {
             process.kill(pid, 'SIGTERM');
             console.log('Stopping NodeBB. Goodbye!');
-        } else {
+        }
+        else {
             console.log('NodeBB is already stopped.');
         }
     });
 }
-
+exports.stop = stop;
 function restart(options) {
     getRunningPid((err, pid) => {
         if (!err) {
-            console.log(chalk.bold('\nRestarting NodeBB'));
+            console.log(chalk_1.default.bold('\nRestarting NodeBB'));
             process.kill(pid, 'SIGTERM');
-
             options.silent = true;
             start(options);
-        } else {
+        }
+        else {
             console.warn('NodeBB could not be restarted, as a running instance could not be found.');
         }
     });
 }
-
+exports.restart = restart;
 function status() {
     getRunningPid((err, pid) => {
         if (!err) {
             console.log(`\n${[
-                chalk.bold('NodeBB Running ') + chalk.cyan(`(pid ${pid.toString()})`),
-                `\t"${chalk.yellow('./nodebb stop')}" to stop the NodeBB server`,
-                `\t"${chalk.yellow('./nodebb log')}" to view server output`,
-                `\t"${chalk.yellow('./nodebb restart')}" to restart NodeBB\n`,
+                chalk_1.default.bold('NodeBB Running ') + chalk_1.default.cyan(`(pid ${pid.toString()})`),
+                `\t"${chalk_1.default.yellow('./nodebb stop')}" to stop the NodeBB server`,
+                `\t"${chalk_1.default.yellow('./nodebb log')}" to view server output`,
+                `\t"${chalk_1.default.yellow('./nodebb restart')}" to restart NodeBB\n`,
             ].join('\n')}`);
-        } else {
-            console.log(chalk.bold('\nNodeBB is not running'));
-            console.log(`\t"${chalk.yellow('./nodebb start')}" to launch the NodeBB server\n`);
+        }
+        else {
+            console.log(chalk_1.default.bold('\nNodeBB is not running'));
+            console.log(`\t"${chalk_1.default.yellow('./nodebb start')}" to launch the NodeBB server\n`);
         }
     });
 }
-
+exports.status = status;
 function log() {
-    console.log(`${chalk.red('\nHit ') + chalk.bold('Ctrl-C ') + chalk.red('to exit\n')}\n`);
-    childProcess.spawn('tail', ['-F', './logs/output.log'], {
+    console.log(`${chalk_1.default.red('\nHit ') + chalk_1.default.bold('Ctrl-C ') + chalk_1.default.red('to exit\n')}\n`);
+    child_process_1.default.spawn('tail', ['-F', './logs/output.log'], {
         stdio: 'inherit',
         cwd,
     });
 }
-
-exports.start = start;
-exports.stop = stop;
-exports.restart = restart;
-exports.status = status;
 exports.log = log;
