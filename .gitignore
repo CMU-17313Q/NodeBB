@@ -25,6 +25,9 @@ feeds/recent.rss
 
 logs/
 
+#tests
+/test/
+
 pidfile
 
 # templates
