@@ -94,7 +94,6 @@ async function deleteUserNids(nids, uid) {
 
 async function getNotificationsFromSet(set, uid, range) {
 	const nids = await db.getSortedSetRevRange(set, range.start, range.stop);
-	//console.log("Raghd");
 	return await UserNotifications.getNotifications(nids, uid);
 }
 
