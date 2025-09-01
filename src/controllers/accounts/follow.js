@@ -11,14 +11,14 @@ const followController = module.exports;
 const url = nconf.get('url');
 
 followController.getFollowing = async function (req, res, next) {
-	await getFollow('account/following', 'following', req, res, next);
+	await getFollow({ tpl: 'account/following', name: 'following', req, res, next });
 };
 
 followController.getFollowers = async function (req, res, next) {
-	await getFollow('account/followers', 'followers', req, res, next);
+	await getFollow({ tpl: 'account/followers', name: 'followers', req, res, next });
 };
 
-async function getFollow(tpl, name, req, res, next) {
+async function getFollow({ tpl, name, req, res, next }) {
 	const { userData: payload } = res.locals;
 	if (!payload) {
 		return next();
@@ -41,7 +41,10 @@ async function getFollow(tpl, name, req, res, next) {
 	const pageCount = Math.ceil(count / resultsPerPage);
 	payload.pagination = pagination.create(page, pageCount);
 
-	payload.breadcrumbs = helpers.buildBreadcrumbs([{ text: username, url: `/user/${userslug}` }, { text: `[[user:${name}]]` }]);
+	payload.breadcrumbs = helpers.buildBreadcrumbs([
+		{ text: username, url: `/user/${userslug}` },
+		{ text: `[[user:${name}]]` },
+	]);
 
 	res.locals.linkTags = [
 		{
