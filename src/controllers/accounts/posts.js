@@ -236,7 +236,8 @@ async function getPostsFromUserSet(template, req, res) {
 	} else {
 		result = await utils.promiseParallel({
 			itemCount: getItemCount(sets, data, settings),
-			itemData: getItemData(sets, data, req, start, stop),
+			//reduce parameters to one object argument
+			itemData: getItemData({sets, data, req, start, stop}),
 		});
 	}
 	const { itemCount, itemData } = result;
@@ -273,7 +274,9 @@ async function getPostsFromUserSet(template, req, res) {
 	res.render(template, payload);
 }
 
-async function getItemData(sets, data, req, start, stop) {
+//Fixed : wraped the parameters into an object
+async function getItemData({sets, data, req, start, stop}) {
+	console.log("aadalbek - getItemData triggered");
 	if (data.getTopics) {
 		return await data.getTopics(sets, req, start, stop);
 	}
