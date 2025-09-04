@@ -276,7 +276,6 @@ async function getPostsFromUserSet(template, req, res) {
 
 //Fixed : wraped the parameters into an object
 async function getItemData({sets, data, req, start, stop}) {
-	console.log("aadalbek - getItemData triggered");
 	if (data.getTopics) {
 		return await data.getTopics(sets, req, start, stop);
 	}
