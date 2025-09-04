@@ -305,4 +305,5 @@ Events.purge = async (tid, eventIds = []) => {
 
 		await db.deleteAll(keys);
 	}
+
 };

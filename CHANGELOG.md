@@ -11288,7 +11288,7 @@
 *  closes #8308, edit post notif for watched topic posts (a73c755b)
 *  add null tests for sorted sets (edf9fe3b)
 *  Add hooks for user blocks (#8296) (c4545381)
-*  allow activating additional plugins for testing via config.json (a969c5ce)
+*  allow activating additional plugins for testing via (a969c5ce)
 *  move plugin tests to separate file (3a23ddab)
 *  remove node14 for now (a72e4429)
 *  reduce infinite scroll area (3fcbd691)
