@@ -67,56 +67,94 @@ async function getGroups(req, sort, page) {
 	return [groupData, pageCount];
 }
 
-groupsController.details = async function (req, res, next) {
+// Helper function to handle slug normalization
+async function normalizeSlug(req, res) {
 	const lowercaseSlug = req.params.slug.toLowerCase();
 	if (req.params.slug !== lowercaseSlug) {
 		if (res.locals.isAPI) {
 			req.params.slug = lowercaseSlug;
-		} else {
-			return res.redirect(`${nconf.get('relative_path')}/groups/${lowercaseSlug}`);
+			return lowercaseSlug;
 		}
+		res.redirect(`${nconf.get('relative_path')}/groups/${lowercaseSlug}`);
+		return null; // here we can see redirection happening
 	}
+	return lowercaseSlug;
+}
+
+// Helper function to check group visibility permissions
+async function checkGroupAccess(groupName, { uid, isAdmin, isGlobalMod }) {
+	const isHidden = await groups.isHidden(groupName);
+	
+	if (!isHidden || isAdmin || isGlobalMod) {
+		return true; // group access is proved here
+	}
+	
+	// For hidden groups, we need to check membership or invitation
+	const [isMember, isInvited] = await Promise.all([
+		groups.isMember(uid, groupName),
+		groups.isInvited(uid, groupName),
+	]);
+	
+	return isMember || isInvited;
+}
+
+// Helper function to fetch group data
+async function fetchGroupData(groupName, uid) {
+	const [groupData, posts] = await Promise.all([
+		groups.get(groupName, {
+			uid: uid,
+			truncateUserList: true,
+			userListCount: 20,
+		}),
+		groups.getLatestMemberPosts(groupName, 10, uid),
+	]);
+	
+	return { groupData, posts };
+}
+
+
+groupsController.details = async function (req, res, next) {
+	
+	// Normalizing slug
+	const normalizedSlug = await normalizeSlug(req, res);
+	if (normalizedSlug === null) {
+		return; // Redirection is here happenning
+	}
+	
+	// Getting group name and check if it exists
 	const groupName = await groups.getGroupNameByGroupSlug(req.params.slug);
 	if (!groupName) {
 		return next();
 	}
-	const [exists, isHidden, isAdmin, isGlobalMod] = await Promise.all([
-		groups.exists(groupName),
-		groups.isHidden(groupName),
-		privileges.admin.can('admin:groups', req.uid),
-		user.isGlobalModerator(req.uid),
-	]);
+	
+	const exists = await groups.exists(groupName);
 	if (!exists) {
 		return next();
 	}
-	if (isHidden && !isAdmin && !isGlobalMod) {
-		const [isMember, isInvited] = await Promise.all([
-			groups.isMember(req.uid, groupName),
-			groups.isInvited(req.uid, groupName),
-		]);
-		if (!isMember && !isInvited) {
-			return next();
-		}
-	}
-	const [groupData, posts] = await Promise.all([
-		groups.get(groupName, {
-			uid: req.uid,
-			truncateUserList: true,
-			userListCount: 20,
-		}),
-		groups.getLatestMemberPosts(groupName, 10, req.uid),
+	
+	// Checking the permissions
+	const [isAdmin, isGlobalMod] = await Promise.all([
+		privileges.admin.can('admin:groups', req.uid),
+		user.isGlobalModerator(req.uid),
 	]);
+	
+	const hasAccess = await checkGroupAccess(groupName, { uid: req.uid, isAdmin, isGlobalMod });
+	if (!hasAccess) {
+		return next();
+	}
+	
+	// Fetching and rendering the data
+	const { groupData, posts } = await fetchGroupData(groupName, req.uid);
 	if (!groupData) {
 		return next();
 	}
-
-	res.locals.linkTags = [
-		{
-			rel: 'canonical',
-			href: `${url}/groups/${lowercaseSlug}`,
-		},
-	];
-
+	
+	// Setting the response
+	res.locals.linkTags = [{
+		rel: 'canonical',
+		href: `${url}/groups/${normalizedSlug}`,
+	}];
+	
 	res.render('groups/details', {
 		title: `[[pages:group, ${groupData.displayName}]]`,
 		group: groupData,
@@ -124,7 +162,10 @@ groupsController.details = async function (req, res, next) {
 		isAdmin: isAdmin,
 		isGlobalMod: isGlobalMod,
 		allowPrivateGroups: meta.config.allowPrivateGroups,
-		breadcrumbs: helpers.buildBreadcrumbs([{ text: '[[pages:groups]]', url: '/groups' }, { text: groupData.displayName }]),
+		breadcrumbs: helpers.buildBreadcrumbs([
+			{ text: '[[pages:groups]]', url: '/groups' }, 
+			{ text: groupData.displayName },
+		]),
 	});
 };
 
