@@ -40,10 +40,8 @@ module.exports = function (User) {
 		}
 	}
 
-	async function create(data) {
-		const timestamp = data.timestamp || Date.now();
-
-		let userData = {
+	async function createUserData(data, timestamp) {
+		const userData = {
 			username: data.username,
 			userslug: data.userslug,
 			joindate: timestamp,
@@ -61,23 +59,10 @@ module.exports = function (User) {
 		if (data.acceptTos === true) {
 			userData.acceptTos = 1;
 		}
+		return userData;
+	}
 
-		const renamedUsername = await User.uniqueUsername(userData);
-		const userNameChanged = !!renamedUsername;
-		if (userNameChanged) {
-			userData.username = renamedUsername;
-			userData.userslug = slugify(renamedUsername);
-		}
-
-		const results = await plugins.hooks.fire('filter:user.create', { user: userData, data: data });
-		userData = results.user;
-
-		const uid = await db.incrObjectField('global', 'nextUid');
-		const isFirstUser = uid === 1;
-		userData.uid = uid;
-
-		await db.setObject(`user:${uid}`, userData);
-
+	async function initializeUser(userData, timestamp, password) {
 		const bulkAdd = [
 			['username:uid', userData.uid, userData.username],
 			[`user:${userData.uid}:usernames`, timestamp, `${userData.username}:${timestamp}`],
@@ -99,15 +84,45 @@ module.exports = function (User) {
 			db.sortedSetAddBulk(bulkAdd),
 			groups.join(['registered-users', 'unverified-users'], userData.uid),
 			User.notifications.sendWelcomeNotification(userData.uid),
-			storePassword(userData.uid, data.password),
+			storePassword(userData.uid, password),
 			User.updateDigestSetting(userData.uid, meta.config.dailyDigestFreq),
 		]);
+	}
 
+	async function create(data) {
+		const timestamp = data.timestamp || Date.now();
+
+		// Create initial user data
+		let userData = await createUserData(data, timestamp);
+
+		// Handle username uniqueness
+		const renamedUsername = await User.uniqueUsername(userData);
+		const userNameChanged = !!renamedUsername;
+		if (userNameChanged) {
+			userData.username = renamedUsername;
+			userData.userslug = slugify(renamedUsername);
+		}
+
+		// Apply plugin filters
+		const results = await plugins.hooks.fire('filter:user.create', { user: userData, data: data });
+		userData = results.user;
+
+		// Generate UID and store user
+		const uid = await db.incrObjectField('global', 'nextUid');
+		const isFirstUser = uid === 1;
+		userData.uid = uid;
+		await db.setObject(`user:${uid}`, userData);
+
+		// Initialize user data structures
+		await initializeUser(userData, timestamp, data.password);
+
+		// Handle email confirmation
 		if (data.email && isFirstUser) {
 			await User.setUserField(uid, 'email', data.email);
 			await User.email.confirmByUid(userData.uid);
 		}
 
+		// Send validation email for regular users
 		if (data.email && userData.uid > 1) {
 			await User.email.sendValidationEmail(userData.uid, {
 				email: data.email,
@@ -115,9 +130,12 @@ module.exports = function (User) {
 				subject: `[[email:welcome-to, ${meta.config.title || meta.config.browserTitle || 'NodeBB'}]]`,
 			}).catch(err => winston.error(`[user.create] Validation email failed to send\n[emailer.send] ${err.stack}`));
 		}
+
+		// Handle username change notification
 		if (userNameChanged) {
 			await User.notifications.sendNameChangeNotification(userData.uid, userData.username);
 		}
+
 		plugins.hooks.fire('action:user.create', { user: userData, data: data });
 		return userData.uid;
 	}
