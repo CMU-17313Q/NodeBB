@@ -195,4 +195,5 @@ async function sanitizeSvg(filePath) {
 	await fs.promises.writeFile(filePath, clean);
 }
 
+
 require('./promisify')(file);
