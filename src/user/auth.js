@@ -50,6 +50,13 @@ async function clearLoginAttempts(uid) {
 	await db.delete(`loginAttempts:${uid}`);
 }
 
+async function resetLockout(uid) {
+	await db.deleteAll([
+		`loginAttempts:${uid}`,
+		`lockout:${uid}`,
+	]);
+}
+
 module.exports = function (User) {
 	User.auth = {};
 
@@ -61,12 +68,7 @@ module.exports = function (User) {
 
 	User.auth.clearLoginAttempts = clearLoginAttempts;
 
-	User.auth.resetLockout = async function (uid) {
-		await db.deleteAll([
-			`loginAttempts:${uid}`,
-			`lockout:${uid}`,
-		]);
-	};
+	User.auth.resetLockout = resetLockout;
 
 	User.auth.getSessions = async function (uid, curSessionId) {
 		await cleanExpiredSessions(uid);
