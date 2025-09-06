@@ -114,6 +114,16 @@ async function revokeSessionsAboveThreshold(User, activeSids, uid) {
 	}
 }
 
+async function revokeSession(sessionIds, uid) {
+	sessionIds = Array.isArray(sessionIds) ? sessionIds : [sessionIds];
+	const destroySids = sids => Promise.all(sids.map(db.sessionStoreDestroy));
+
+	await Promise.all([
+		db.sortedSetRemove(`uid:${uid}:sessions`, sessionIds),
+		destroySids(sessionIds),
+	]);
+}
+
 module.exports = function (User) {
 	User.auth = {};
 
@@ -133,15 +143,7 @@ module.exports = function (User) {
 		await addSession(User, uid, sessionId);
 	};
 
-	User.auth.revokeSession = async function (sessionIds, uid) {
-		sessionIds = Array.isArray(sessionIds) ? sessionIds : [sessionIds];
-		const destroySids = sids => Promise.all(sids.map(db.sessionStoreDestroy));
-
-		await Promise.all([
-			db.sortedSetRemove(`uid:${uid}:sessions`, sessionIds),
-			destroySids(sessionIds),
-		]);
-	};
+	User.auth.revokeSession = revokeSession;
 
 	User.auth.revokeAllSessions = async function (uids, except) {
 		uids = Array.isArray(uids) ? uids : [uids];
