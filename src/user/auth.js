@@ -96,6 +96,24 @@ async function cleanExpiredSessions(uid) {
 	return activeSids;
 }
 
+async function addSession(User, uid, sessionId) {
+	if (!(parseInt(uid, 10) > 0)) {
+		return;
+	}
+
+	const activeSids = await cleanExpiredSessions(uid);
+	await db.sortedSetAdd(`uid:${uid}:sessions`, Date.now(), sessionId);
+	activeSids.push(sessionId);
+	await revokeSessionsAboveThreshold(User, activeSids, uid);
+}
+
+async function revokeSessionsAboveThreshold(User, activeSids, uid) {
+	if (meta.config.maxUserSessions > 0 && activeSids.length > meta.config.maxUserSessions) {
+		const sessionsToRevoke = activeSids.slice(0, activeSids.length - meta.config.maxUserSessions);
+		await User.auth.revokeSession(sessionsToRevoke, uid);
+	}
+}
+
 module.exports = function (User) {
 	User.auth = {};
 
@@ -111,46 +129,9 @@ module.exports = function (User) {
 
 	User.auth.getSessions = getSessions;
 
-	async function cleanExpiredSessions(uid) {
-		const sids = await db.getSortedSetRange(`uid:${uid}:sessions`, 0, -1);
-		if (!sids.length) {
-			return [];
-		}
-
-		const expiredSids = [];
-		const activeSids = [];
-		await Promise.all(sids.map(async (sid) => {
-			const sessionObj = await db.sessionStoreGet(sid);
-			const expired = !sessionObj || !sessionObj.hasOwnProperty('passport') ||
-				!sessionObj.passport.hasOwnProperty('user') ||
-				parseInt(sessionObj.passport.user, 10) !== parseInt(uid, 10);
-			if (expired) {
-				expiredSids.push(sid);
-			} else {
-				activeSids.push(sid);
-			}
-		}));
-
-		await db.sortedSetRemove(`uid:${uid}:sessions`, expiredSids);
-		return activeSids;
-	}
-
 	User.auth.addSession = async function (uid, sessionId) {
-		if (!(parseInt(uid, 10) > 0)) {
-			return;
-		}
-
-		const activeSids = await cleanExpiredSessions(uid);
-		await db.sortedSetAdd(`uid:${uid}:sessions`, Date.now(), sessionId);
-		await revokeSessionsAboveThreshold(activeSids.push(sessionId), uid);
+		await addSession(User, uid, sessionId);
 	};
-
-	async function revokeSessionsAboveThreshold(activeSids, uid) {
-		if (meta.config.maxUserSessions > 0 && activeSids.length > meta.config.maxUserSessions) {
-			const sessionsToRevoke = activeSids.slice(0, activeSids.length - meta.config.maxUserSessions);
-			await User.auth.revokeSession(sessionsToRevoke, uid);
-		}
-	}
 
 	User.auth.revokeSession = async function (sessionIds, uid) {
 		sessionIds = Array.isArray(sessionIds) ? sessionIds : [sessionIds];
