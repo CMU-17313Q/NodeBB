@@ -124,6 +124,19 @@ async function revokeSession(sessionIds, uid) {
 	]);
 }
 
+async function revokeAllSessions(User, uids, except) {
+	uids = Array.isArray(uids) ? uids : [uids];
+	const sids = await db.getSortedSetsMembers(uids.map(uid => `uid:${uid}:sessions`));
+	const promises = [];
+	uids.forEach((uid, index) => {
+		const ids = sids[index].filter(id => id !== except);
+		if (ids.length) {
+			promises.push(User.auth.revokeSession(ids, uid));
+		}
+	});
+	await Promise.all(promises);
+}
+
 module.exports = function (User) {
 	User.auth = {};
 
@@ -146,16 +159,7 @@ module.exports = function (User) {
 	User.auth.revokeSession = revokeSession;
 
 	User.auth.revokeAllSessions = async function (uids, except) {
-		uids = Array.isArray(uids) ? uids : [uids];
-		const sids = await db.getSortedSetsMembers(uids.map(uid => `uid:${uid}:sessions`));
-		const promises = [];
-		uids.forEach((uid, index) => {
-			const ids = sids[index].filter(id => id !== except);
-			if (ids.length) {
-				promises.push(User.auth.revokeSession(ids, uid));
-			}
-		});
-		await Promise.all(promises);
+		await revokeAllSessions(User, uids, except);
 	};
 
 	User.auth.deleteAllSessions = async function () {
