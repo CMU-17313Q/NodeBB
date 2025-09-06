@@ -1,6 +1,5 @@
 'use strict';
 
-
 const nconf = require('nconf');
 const meta = require('./meta');
 
@@ -18,23 +17,30 @@ coverPhoto.getDefaultProfileCover = function (uid) {
 
 function getCover(type, id) {
 	const defaultCover = `${relative_path}/assets/images/cover-default.png`;
-	if (meta.config[`${type}:defaultCovers`]) {
-		const covers = String(meta.config[`${type}:defaultCovers`]).trim().split(/[\s,]+/g);
-		let coverPhoto = defaultCover;
-		if (!covers.length) {
-			return coverPhoto;
-		}
+	const configKey = `${type}:defaultCovers`;
 
-		if (typeof id === 'string') {
-			id = (id.charCodeAt(0) + id.charCodeAt(1)) % covers.length;
-		} else {
-			id %= covers.length;
-		}
-		if (covers[id]) {
-			coverPhoto = covers[id].startsWith('http') ? covers[id] : (relative_path + covers[id]);
-		}
-		return coverPhoto;
+	if (!meta.config[configKey]) {
+		return defaultCover;
 	}
 
+	const covers = String(meta.config[configKey]).trim().split(/[\s,]+/g);
+
+	if (covers.length === 0) {
+		return defaultCover;
+	}
+
+	let index;
+	if (typeof id === 'string') {
+		index = (id.charCodeAt(0) + id.charCodeAt(1)) % covers.length;
+	} else {
+		index = id % covers.length;
+	}
+
+	const selectedCover = covers[index];
+
+	if (selectedCover) {
+		return selectedCover.startsWith('http') ? selectedCover : `${relative_path}${selectedCover}`;
+	}
+	
 	return defaultCover;
 }
