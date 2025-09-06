@@ -137,6 +137,18 @@ async function revokeAllSessions(User, uids, except) {
 	await Promise.all(promises);
 }
 
+async function deleteAllSessions() {
+	await batch.processSortedSet('users:joindate', async (uids) => {
+		const sessionKeys = uids.map(uid => `uid:${uid}:sessions`);
+		const sids = _.flatten(await db.getSortedSetRange(sessionKeys, 0, -1));
+
+		await Promise.all([
+			db.deleteAll(sessionKeys),
+			...sids.map(sid => db.sessionStoreDestroy(sid)),
+		]);
+	}, { batch: 1000 });
+}
+
 module.exports = function (User) {
 	User.auth = {};
 
@@ -162,15 +174,5 @@ module.exports = function (User) {
 		await revokeAllSessions(User, uids, except);
 	};
 
-	User.auth.deleteAllSessions = async function () {
-		await batch.processSortedSet('users:joindate', async (uids) => {
-			const sessionKeys = uids.map(uid => `uid:${uid}:sessions`);
-			const sids = _.flatten(await db.getSortedSetRange(sessionKeys, 0, -1));
-
-			await Promise.all([
-				db.deleteAll(sessionKeys),
-				...sids.map(sid => db.sessionStoreDestroy(sid)),
-			]);
-		}, { batch: 1000 });
-	};
+	User.auth.deleteAllSessions = deleteAllSessions;
 };
