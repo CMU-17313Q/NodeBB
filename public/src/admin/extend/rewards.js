@@ -81,36 +81,50 @@ define('admin/extend/rewards', [
 	function selectReward(el) {
 		const parent = el.parents('[data-rid]');
 		const div = parent.find('.inputs');
-		let inputs;
-		let html = '';
+		const selectedReward = getReward(el);
+		if (!selectedReward) return;
 
-		const selectedReward = available.find(reward => reward.rid === el.attr('data-selected'));
-		if (selectedReward) {
-			inputs = selectedReward.inputs;
-			parent.attr('data-rid', selectedReward.rid);
-		}
+		parent.attr('data-rid', selectedReward.rid);
 
-		if (!inputs) {
+		const inputs = selectedReward.inputs;
+		const html = inputsHtml(inputs);
+		if (!html) {
 			return alerts.error('[[admin/extend/rewards:alert.no-inputs-found]] ' + el.attr('data-selected'));
 		}
 
-		inputs.forEach(function (input) {
+		div.html(html);
+	}
+
+	//Helper function for selectReward to get the reward
+	function getReward(el) {
+		const selectedReward = available.find(reward => reward.rid === el.attr('data-selected'));
+		if (!selectedReward) {
+			return null;
+		}
+		return selectedReward;
+	}
+
+	//Helper function for selectReward to build the HTML
+	function inputsHtml(inputs) {
+		if (!inputs) {
+			return alerts.error('[[admin/extend/rewards:alert.no-inputs-found]]');
+		};
+
+		return inputs.map(input => {
+			let html = '';
 			html += `<label class="form-label text-nowrap" for="${input.name}">${input.label}<br />`;
-			switch (input.type) {
-				case 'select':
-					html += `<select class="form-select form-select-sm" name="${input.name}" >`;
-					input.values.forEach(function (value) {
-						html += `<option value="${value.value}">${value.name}</option>`;
-					});
-					break;
-				case 'text':
-					html += `<input type="text" class="form-control form-control-sm" name="${input.name}"  />`;
-					break;
+			
+			if (input.type == 'text') {
+				html += `<input type="text" class="form-control form-control-sm" name="${input.name}"  />`;
+			} else if (input.type == 'select') {
+				html += `<select class="form-select form-select-sm" name="${input.name}" >`;
+				input.values.forEach(function (value) {
+					html += `<option value="${value.value}">${value.name}</option>`;
+				});
 			}
 			html += '</label>';
+			return html;
 		});
-
-		div.html(html);
 	}
 
 	function populateInputs() {
