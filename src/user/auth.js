@@ -46,6 +46,10 @@ async function getFeedToken(User, uid) {
 	return token;
 }
 
+async function clearLoginAttempts(uid) {
+	await db.delete(`loginAttempts:${uid}`);
+}
+
 module.exports = function (User) {
 	User.auth = {};
 
@@ -55,9 +59,7 @@ module.exports = function (User) {
 		return await getFeedToken(User, uid);
 	};
 
-	User.auth.clearLoginAttempts = async function (uid) {
-		await db.delete(`loginAttempts:${uid}`);
-	};
+	User.auth.clearLoginAttempts = clearLoginAttempts;
 
 	User.auth.resetLockout = async function (uid) {
 		await db.deleteAll([
