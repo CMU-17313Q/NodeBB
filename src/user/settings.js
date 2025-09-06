@@ -1,14 +1,85 @@
-
 'use strict';
-
 const validator = require('validator');
-
 const meta = require('../meta');
 const db = require('../database');
 const activitypub = require('../activitypub');
 const plugins = require('../plugins');
 const notifications = require('../notifications');
 const languages = require('../languages');
+const remoteDefaultSettings = Object.freeze({
+	categoryWatchState: 'notwatching',
+});
+
+async function onSettingsLoaded(uid, settings) {
+	const data = await plugins.hooks.fire('filter:user.getSettings', { uid: uid, settings: settings });
+	settings = data.settings;
+
+	const defaultTopicsPerPage = meta.config.topicsPerPage;
+	const defaultPostsPerPage = meta.config.postsPerPage;
+
+	settings.showemail = parseInt(getSetting(settings, 'showemail', 0), 10) === 1;
+	settings.showfullname = parseInt(getSetting(settings, 'showfullname', 0), 10) === 1;
+	settings.openOutgoingLinksInNewTab = parseInt(getSetting(settings, 'openOutgoingLinksInNewTab', 0), 10) === 1;
+	settings.dailyDigestFreq = getSetting(settings, 'dailyDigestFreq', 'off');
+	settings.usePagination = parseInt(getSetting(settings, 'usePagination', 0), 10) === 1;
+	settings.topicsPerPage = Math.min(
+		meta.config.maxTopicsPerPage,
+		settings.topicsPerPage ? parseInt(settings.topicsPerPage, 10) : defaultTopicsPerPage,
+		defaultTopicsPerPage
+	);
+	settings.postsPerPage = Math.min(
+		meta.config.maxPostsPerPage,
+		settings.postsPerPage ? parseInt(settings.postsPerPage, 10) : defaultPostsPerPage,
+		defaultPostsPerPage
+	);
+	settings.userLang = settings.userLang || meta.config.defaultLang || 'en-GB';
+	settings.acpLang = settings.acpLang || settings.userLang;
+	settings.topicPostSort = getSetting(settings, 'topicPostSort', 'oldest_to_newest');
+	settings.categoryTopicSort = getSetting(settings, 'categoryTopicSort', 'recently_replied');
+	settings.followTopicsOnCreate = parseInt(getSetting(settings, 'followTopicsOnCreate', 1), 10) === 1;
+	settings.followTopicsOnReply = parseInt(getSetting(settings, 'followTopicsOnReply', 0), 10) === 1;
+	settings.upvoteNotifFreq = getSetting(settings, 'upvoteNotifFreq', 'all');
+	settings.disableIncomingChats = parseInt(getSetting(settings, 'disableIncomingChats', 0), 10) === 1;
+	settings.topicSearchEnabled = parseInt(getSetting(settings, 'topicSearchEnabled', 0), 10) === 1;
+	settings.updateUrlWithPostIndex = parseInt(getSetting(settings, 'updateUrlWithPostIndex', 1), 10) === 1;
+	settings.bootswatchSkin = validator.escape(String(settings.bootswatchSkin || ''));
+	settings.homePageRoute = validator.escape(String(settings.homePageRoute || '')).replace(/&#x2F;/g, '/');
+	settings.scrollToMyPost = parseInt(getSetting(settings, 'scrollToMyPost', 1), 10) === 1;
+	settings.categoryWatchState = getSetting(settings, 'categoryWatchState', 'notwatching');
+
+	const notificationTypes = await notifications.getAllNotificationTypes();
+	notificationTypes.forEach((notificationType) => {
+		settings[notificationType] = getSetting(settings, notificationType, 'notification');
+	});
+
+	settings.chatAllowList = parseJSONSetting(settings.chatAllowList || '[]', []).map(String);
+	settings.chatDenyList = parseJSONSetting(settings.chatDenyList || '[]', []).map(String);
+	return settings;
+};
+
+function parseJSONSetting(value, defaultValue) {
+	let res = defaultValue;
+	try {
+		res = JSON.parse(value);
+		return res;
+	} catch (_) {
+		return res;
+	}
+};
+
+function getSetting(settings, key, defaultValue) {
+	let res = defaultValue;
+
+	if (Object.prototype.hasOwnProperty.call(settings, key)) {
+		res = settings[key];
+	} else if (activitypub.helpers.isUri(settings.uid) &&
+             Object.prototype.hasOwnProperty.call(remoteDefaultSettings, key)) {
+		res = remoteDefaultSettings[key];
+	} else if (Object.prototype.hasOwnProperty.call(meta.config, key)) {
+		res = meta.config[key];
+	}
+	return res;
+};
 
 module.exports = function (User) {
 	const spiderDefaultSettings = {
@@ -17,101 +88,39 @@ module.exports = function (User) {
 		postsPerPage: 20,
 		topicsPerPage: 20,
 	};
-	const remoteDefaultSettings = Object.freeze({
-		categoryWatchState: 'notwatching',
-	});
 
 	User.getSettings = async function (uid) {
+		let payload;
+
 		if (parseInt(uid, 10) <= 0) {
 			const isSpider = parseInt(uid, 10) === -1;
-			return await onSettingsLoaded(uid, isSpider ? spiderDefaultSettings : {});
+			payload = isSpider ? spiderDefaultSettings : {};
 		}
-		let settings = await db.getObject(`user:${uid}:settings`);
-		settings = settings || {};
-		settings.uid = uid;
-		return await onSettingsLoaded(uid, settings);
+		else {
+			let settings = await db.getObject(`user:${uid}:settings`);
+			settings = settings || {};
+			settings.uid = uid;
+			payload = settings;
+		}
+		return onSettingsLoaded(uid, payload);
 	};
 
 	User.getMultipleUserSettings = async function (uids) {
-		if (!Array.isArray(uids) || !uids.length) {
-			return [];
+		let res = [];
+
+		if (Array.isArray(uids) && uids.length) {
+			const keys = uids.map(uid => `user:${uid}:settings`);
+			const raw = await db.getObjects(keys);
+			const normalized = raw.map((s, i) => {
+				s = s || {};
+				s.uid = uids[i];
+				return s; 
+			});
+			res = await Promise.all(normalized.map(s => onSettingsLoaded(s.uid, s)));
 		}
 
-		const keys = uids.map(uid => `user:${uid}:settings`);
-		let settings = await db.getObjects(keys);
-		settings = settings.map((userSettings, index) => {
-			userSettings = userSettings || {};
-			userSettings.uid = uids[index];
-			return userSettings;
-		});
-		return await Promise.all(settings.map(s => onSettingsLoaded(s.uid, s)));
+		return res;
 	};
-
-	async function onSettingsLoaded(uid, settings) {
-		const data = await plugins.hooks.fire('filter:user.getSettings', { uid: uid, settings: settings });
-		settings = data.settings;
-
-		const defaultTopicsPerPage = meta.config.topicsPerPage;
-		const defaultPostsPerPage = meta.config.postsPerPage;
-
-		settings.showemail = parseInt(getSetting(settings, 'showemail', 0), 10) === 1;
-		settings.showfullname = parseInt(getSetting(settings, 'showfullname', 0), 10) === 1;
-		settings.openOutgoingLinksInNewTab = parseInt(getSetting(settings, 'openOutgoingLinksInNewTab', 0), 10) === 1;
-		settings.dailyDigestFreq = getSetting(settings, 'dailyDigestFreq', 'off');
-		settings.usePagination = parseInt(getSetting(settings, 'usePagination', 0), 10) === 1;
-		settings.topicsPerPage = Math.min(
-			meta.config.maxTopicsPerPage,
-			settings.topicsPerPage ? parseInt(settings.topicsPerPage, 10) : defaultTopicsPerPage,
-			defaultTopicsPerPage
-		);
-		settings.postsPerPage = Math.min(
-			meta.config.maxPostsPerPage,
-			settings.postsPerPage ? parseInt(settings.postsPerPage, 10) : defaultPostsPerPage,
-			defaultPostsPerPage
-		);
-		settings.userLang = settings.userLang || meta.config.defaultLang || 'en-GB';
-		settings.acpLang = settings.acpLang || settings.userLang;
-		settings.topicPostSort = getSetting(settings, 'topicPostSort', 'oldest_to_newest');
-		settings.categoryTopicSort = getSetting(settings, 'categoryTopicSort', 'recently_replied');
-		settings.followTopicsOnCreate = parseInt(getSetting(settings, 'followTopicsOnCreate', 1), 10) === 1;
-		settings.followTopicsOnReply = parseInt(getSetting(settings, 'followTopicsOnReply', 0), 10) === 1;
-		settings.upvoteNotifFreq = getSetting(settings, 'upvoteNotifFreq', 'all');
-		settings.disableIncomingChats = parseInt(getSetting(settings, 'disableIncomingChats', 0), 10) === 1;
-		settings.topicSearchEnabled = parseInt(getSetting(settings, 'topicSearchEnabled', 0), 10) === 1;
-		settings.updateUrlWithPostIndex = parseInt(getSetting(settings, 'updateUrlWithPostIndex', 1), 10) === 1;
-		settings.bootswatchSkin = validator.escape(String(settings.bootswatchSkin || ''));
-		settings.homePageRoute = validator.escape(String(settings.homePageRoute || '')).replace(/&#x2F;/g, '/');
-		settings.scrollToMyPost = parseInt(getSetting(settings, 'scrollToMyPost', 1), 10) === 1;
-		settings.categoryWatchState = getSetting(settings, 'categoryWatchState', 'notwatching');
-
-		const notificationTypes = await notifications.getAllNotificationTypes();
-		notificationTypes.forEach((notificationType) => {
-			settings[notificationType] = getSetting(settings, notificationType, 'notification');
-		});
-
-		settings.chatAllowList = parseJSONSetting(settings.chatAllowList || '[]', []).map(String);
-		settings.chatDenyList = parseJSONSetting(settings.chatDenyList || '[]', []).map(String);
-		return settings;
-	}
-
-	function parseJSONSetting(value, defaultValue) {
-		try {
-			return JSON.parse(value);
-		} catch (err) {
-			return defaultValue;
-		}
-	}
-
-	function getSetting(settings, key, defaultValue) {
-		if (settings[key] || settings[key] === 0) {
-			return settings[key];
-		} else if (activitypub.helpers.isUri(settings.uid) && remoteDefaultSettings[key]) {
-			return remoteDefaultSettings[key];
-		} else if (meta.config[key] || meta.config[key] === 0) {
-			return meta.config[key];
-		}
-		return defaultValue;
-	}
 
 	User.saveSettings = async function (uid, data) {
 		const maxPostsPerPage = meta.config.maxPostsPerPage || 20;
@@ -188,10 +197,10 @@ module.exports = function (User) {
 	};
 
 	User.setSetting = async function (uid, key, value) {
-		if (parseInt(uid, 10) <= 0) {
-			return;
+		const intUid = parseInt(uid, 10);
+		if (intUid > 0) {
+			await db.setObjectField(`user:${intUid}:settings`, key, value);
 		}
-
-		await db.setObjectField(`user:${uid}:settings`, key, value);
 	};
+
 };
