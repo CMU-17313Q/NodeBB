@@ -8,34 +8,36 @@ const events = require('../events');
 const batch = require('../batch');
 const utils = require('../utils');
 
+async function logAttempt(uid, ip) {
+	if (!(parseInt(uid, 10) > 0)) {
+		return;
+	}
+	const exists = await db.exists(`lockout:${uid}`);
+	if (exists) {
+		throw new Error('[[error:account-locked]]');
+	}
+	const attempts = await db.increment(`loginAttempts:${uid}`);
+	if (attempts <= meta.config.loginAttempts) {
+		return await db.pexpire(`loginAttempts:${uid}`, 1000 * 60 * 60);
+	}
+	// Lock out the account
+	await db.set(`lockout:${uid}`, '');
+	const duration = 1000 * 60 * meta.config.lockoutDuration;
+
+	await db.delete(`loginAttempts:${uid}`);
+	await db.pexpire(`lockout:${uid}`, duration);
+	await events.log({
+		type: 'account-locked',
+		uid: uid,
+		ip: ip,
+	});
+	throw new Error('[[error:account-locked]]');
+}
+
 module.exports = function (User) {
 	User.auth = {};
 
-	User.auth.logAttempt = async function (uid, ip) {
-		if (!(parseInt(uid, 10) > 0)) {
-			return;
-		}
-		const exists = await db.exists(`lockout:${uid}`);
-		if (exists) {
-			throw new Error('[[error:account-locked]]');
-		}
-		const attempts = await db.increment(`loginAttempts:${uid}`);
-		if (attempts <= meta.config.loginAttempts) {
-			return await db.pexpire(`loginAttempts:${uid}`, 1000 * 60 * 60);
-		}
-		// Lock out the account
-		await db.set(`lockout:${uid}`, '');
-		const duration = 1000 * 60 * meta.config.lockoutDuration;
-
-		await db.delete(`loginAttempts:${uid}`);
-		await db.pexpire(`lockout:${uid}`, duration);
-		await events.log({
-			type: 'account-locked',
-			uid: uid,
-			ip: ip,
-		});
-		throw new Error('[[error:account-locked]]');
-	};
+	User.auth.logAttempt = logAttempt;
 
 	User.auth.getFeedToken = async function (uid) {
 		if (!(parseInt(uid, 10) > 0)) {
