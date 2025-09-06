@@ -303,7 +303,7 @@ async function generateForRecentPosts(req, res, next) {
 	const postsPerPage = 20;
 	const start = Math.max(0, (page - 1) * postsPerPage);
 	const stop = start + postsPerPage - 1;
-	const postData = await posts.getRecentPosts(req.uid, start, stop, 'month');
+	const postData = await posts.getRecentPosts(req.uid, {start, stop}, 'month');
 	const feed = generateForPostsFeed({
 		title: 'Recent Posts',
 		description: 'A list of recent posts',

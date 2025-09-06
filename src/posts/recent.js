@@ -13,7 +13,7 @@ module.exports = function (Posts) {
 		month: 2592000000,
 	};
 
-	Posts.getRecentPosts = async function (uid, start, stop, term) {
+	Posts.getRecentPosts = async function (uid, {start, stop}, term) {
 		let min = 0;
 		if (terms[term]) {
 			min = Date.now() - terms[term];
