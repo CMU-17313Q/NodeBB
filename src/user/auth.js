@@ -34,21 +34,25 @@ async function logAttempt(uid, ip) {
 	throw new Error('[[error:account-locked]]');
 }
 
+async function getFeedToken(User, uid) {
+	if (!(parseInt(uid, 10) > 0)) {
+		return;
+	}
+	const _token = await db.getObjectField(`user:${uid}`, 'rss_token');
+	const token = _token || utils.generateUUID();
+	if (!_token) {
+		await User.setUserField(uid, 'rss_token', token);
+	}
+	return token;
+}
+
 module.exports = function (User) {
 	User.auth = {};
 
 	User.auth.logAttempt = logAttempt;
 
 	User.auth.getFeedToken = async function (uid) {
-		if (!(parseInt(uid, 10) > 0)) {
-			return;
-		}
-		const _token = await db.getObjectField(`user:${uid}`, 'rss_token');
-		const token = _token || utils.generateUUID();
-		if (!_token) {
-			await User.setUserField(uid, 'rss_token', token);
-		}
-		return token;
+		return await getFeedToken(User, uid);
 	};
 
 	User.auth.clearLoginAttempts = async function (uid) {
