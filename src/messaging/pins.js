@@ -18,8 +18,9 @@ module.exports = function (Messaging) {
 			await Messaging.setMessageFields(mid, { pinned: 0 });
 		}
 	};
-
-	Messaging.getPinnedMessages = async (roomId, uid, start, stop) => {
+	
+	Messaging.getPinnedMessages = async (...args) => {
+		const [roomId, uid, start, stop] = args;
 		const mids = await db.getSortedSetRevRange(`chat:room:${roomId}:mids:pinned`, start, stop);
 		if (!mids.length) {
 			return [];
