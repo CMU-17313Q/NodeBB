@@ -57,6 +57,45 @@ async function resetLockout(uid) {
 	]);
 }
 
+async function getSessions(uid, curSessionId) {
+	await cleanExpiredSessions(uid);
+	const sids = await db.getSortedSetRevRange(`uid:${uid}:sessions`, 0, 19);
+	let sessions = await Promise.all(sids.map(sid => db.sessionStoreGet(sid)));
+	sessions = sessions.map((sessObj, idx) => {
+		if (sessObj && sessObj.meta) {
+			sessObj.meta.current = curSessionId === sids[idx];
+			sessObj.meta.datetimeISO = new Date(sessObj.meta.datetime).toISOString();
+			sessObj.meta.ip = validator.escape(String(sessObj.meta.ip));
+		}
+		return sessObj && sessObj.meta;
+	}).filter(Boolean);
+	return sessions;
+}
+
+async function cleanExpiredSessions(uid) {
+	const sids = await db.getSortedSetRange(`uid:${uid}:sessions`, 0, -1);
+	if (!sids.length) {
+		return [];
+	}
+
+	const expiredSids = [];
+	const activeSids = [];
+	await Promise.all(sids.map(async (sid) => {
+		const sessionObj = await db.sessionStoreGet(sid);
+		const expired = !sessionObj || !sessionObj.hasOwnProperty('passport') ||
+			!sessionObj.passport.hasOwnProperty('user') ||
+			parseInt(sessionObj.passport.user, 10) !== parseInt(uid, 10);
+		if (expired) {
+			expiredSids.push(sid);
+		} else {
+			activeSids.push(sid);
+		}
+	}));
+
+	await db.sortedSetRemove(`uid:${uid}:sessions`, expiredSids);
+	return activeSids;
+}
+
 module.exports = function (User) {
 	User.auth = {};
 
@@ -70,20 +109,7 @@ module.exports = function (User) {
 
 	User.auth.resetLockout = resetLockout;
 
-	User.auth.getSessions = async function (uid, curSessionId) {
-		await cleanExpiredSessions(uid);
-		const sids = await db.getSortedSetRevRange(`uid:${uid}:sessions`, 0, 19);
-		let sessions = await Promise.all(sids.map(sid => db.sessionStoreGet(sid)));
-		sessions = sessions.map((sessObj, idx) => {
-			if (sessObj && sessObj.meta) {
-				sessObj.meta.current = curSessionId === sids[idx];
-				sessObj.meta.datetimeISO = new Date(sessObj.meta.datetime).toISOString();
-				sessObj.meta.ip = validator.escape(String(sessObj.meta.ip));
-			}
-			return sessObj && sessObj.meta;
-		}).filter(Boolean);
-		return sessions;
-	};
+	User.auth.getSessions = getSessions;
 
 	async function cleanExpiredSessions(uid) {
 		const sids = await db.getSortedSetRange(`uid:${uid}:sessions`, 0, -1);
