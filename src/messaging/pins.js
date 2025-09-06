@@ -20,7 +20,6 @@ module.exports = function (Messaging) {
 	};
 	
 	Messaging.getPinnedMessages = async (...args) => {
-		console.log('Fixed by Nasser Al-Ejail');
 		const [roomId, uid, start, stop] = args;
 		const mids = await db.getSortedSetRevRange(`chat:room:${roomId}:mids:pinned`, start, stop);
 		if (!mids.length) {
