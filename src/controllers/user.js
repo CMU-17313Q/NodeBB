@@ -42,20 +42,25 @@ userController.getUserDataByField = async function (callerUid, field, fieldValue
 	} else if (field === 'username') {
 		uid = await user.getUidByUsername(fieldValue);
 	} else if (field === 'email') {
-		uid = await user.getUidByEmail(fieldValue);
-		if (uid) {
-			const isPrivileged = await user.isAdminOrGlobalMod(callerUid);
-			const settings = await user.getSettings(uid);
-			if (!isPrivileged && (settings && !settings.showemail)) {
-				uid = 0;
-			}
-		}
+		uid = await getUidByEmailWithPrivacyCheck(callerUid, fieldValue);
 	}
 	if (!uid) {
 		return null;
 	}
 	return await userController.getUserDataByUID(callerUid, uid);
 };
+
+async function getUidByEmailWithPrivacyCheck(callerUid, email) {
+	const uid = await user.getUidByEmail(email);
+	if (!uid) return null;
+
+	const isPrivileged = await user.isAdminOrGlobalMod(callerUid);
+	const settings = await user.getSettings(uid);
+	if (!isPrivileged && (settings && !settings.showemail)) {
+		return 0;
+	}
+	return uid;
+}
 
 userController.getUserDataByUID = async function (callerUid, uid) {
 	if (!parseInt(uid, 10)) {
