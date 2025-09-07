@@ -116,7 +116,7 @@ Digest.send = async function (data) {
 			const noRooms = publicRooms.length === 0;
 			
 
-			
+			console.log('SALWA', userObj.uid);
 			if ([noNotifs, noTop, noPopular, noRecent, noRooms].every(Boolean)) {
 				return;
 			}
