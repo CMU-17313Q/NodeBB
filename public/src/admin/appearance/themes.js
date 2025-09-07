@@ -4,45 +4,58 @@
 define('admin/appearance/themes', ['bootbox', 'translator', 'alerts'], function (bootbox, translator, alerts) {
 	const Themes = {};
 
+	function getThemeInfoFrom(target) {
+		const parentEl = target.parents('[data-theme]');
+		return {
+			themeType: parentEl.attr('data-type'),
+			cssSrc: parentEl.attr('data-css'),
+			themeId: parentEl.attr('data-theme'),
+		};
+	}
+
+	function applyTheme(themeType, themeId, cssSrc) {
+		socket.emit('admin.themes.set', { type: themeType, id: themeId, src: cssSrc }, function (err) {
+			if (err) {
+				return alerts.error(err);
+			}
+			config['theme:id'] = themeId;
+			highlightSelectedTheme(themeId);
+
+			alerts.alert({
+				alert_id: 'admin:theme',
+				type: 'info',
+				title: '[[admin/appearance/themes:theme-changed]]',
+				message: '[[admin/appearance/themes:restart-to-activate]]',
+				timeout: 5000,
+				clickfn: function () {
+					require(['admin/modules/instance'], function (instance) {
+						instance.rebuildAndRestart();
+					});
+				},
+			});
+		});
+	}
+
+
 	Themes.init = function () {
+
 		$('#installed_themes').on('click', function (e) {
 			const target = $(e.target);
 			const action = target.attr('data-action');
 
-			if (action && action === 'use') {
-				const parentEl = target.parents('[data-theme]');
-				const themeType = parentEl.attr('data-type');
-				const cssSrc = parentEl.attr('data-css');
-				const themeId = parentEl.attr('data-theme');
-
-				if (config['theme:id'] === themeId) {
-					return;
-				}
-				socket.emit('admin.themes.set', {
-					type: themeType,
-					id: themeId,
-					src: cssSrc,
-				}, function (err) {
-					if (err) {
-						return alerts.error(err);
-					}
-					config['theme:id'] = themeId;
-					highlightSelectedTheme(themeId);
-
-					alerts.alert({
-						alert_id: 'admin:theme',
-						type: 'info',
-						title: '[[admin/appearance/themes:theme-changed]]',
-						message: '[[admin/appearance/themes:restart-to-activate]]',
-						timeout: 5000,
-						clickfn: function () {
-							require(['admin/modules/instance'], function (instance) {
-								instance.rebuildAndRestart();
-							});
-						},
-					});
-				});
+			// guarding clause to reduce nesting
+			if (action !== 'use') {
+				return;
 			}
+
+			const { themeType, cssSrc, themeId } = getThemeInfoFrom(target);
+
+			// already selected → no-op
+			if (config['theme:id'] === themeId) {
+				return;
+			}
+
+			applyTheme(themeType, themeId, cssSrc);
 		});
 
 		$('#revert_theme').on('click', function () {
@@ -50,28 +63,28 @@ define('admin/appearance/themes', ['bootbox', 'translator', 'alerts'], function 
 				return;
 			}
 			bootbox.confirm('[[admin/appearance/themes:revert-confirm]]', function (confirm) {
-				if (confirm) {
-					socket.emit('admin.themes.set', {
-						type: 'local',
-						id: 'nodebb-theme-harmony',
-					}, function (err) {
-						if (err) {
-							return alerts.error(err);
-						}
-						config['theme:id'] = 'nodebb-theme-harmony';
-						highlightSelectedTheme('nodebb-theme-harmony');
-						alerts.alert({
-							alert_id: 'admin:theme',
-							type: 'success',
-							title: '[[admin/appearance/themes:theme-changed]]',
-							message: '[[admin/appearance/themes:revert-success]]',
-							timeout: 3500,
-						});
-					});
+				if (!confirm) {
+					return;
 				}
+				socket.emit('admin.themes.set', {
+					type: 'local',
+					id: 'nodebb-theme-harmony',
+				}, function (err) {
+					if (err) {
+						return alerts.error(err);
+					}
+					config['theme:id'] = 'nodebb-theme-harmony';
+					highlightSelectedTheme('nodebb-theme-harmony');
+					alerts.alert({
+						alert_id: 'admin:theme',
+						type: 'success',
+						title: '[[admin/appearance/themes:theme-changed]]',
+						message: '[[admin/appearance/themes:revert-success]]',
+						timeout: 3500,
+					});
+				});
 			});
 		});
-
 		socket.emit('admin.themes.getInstalled', function (err, themes) {
 			if (err) {
 				return alerts.error(err);
