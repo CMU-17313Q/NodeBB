@@ -109,9 +109,15 @@ Digest.send = async function (data) {
 			]);
 			const unreadNotifs = notifications.filter(Boolean);
 			// If there are no notifications and no new topics and no unread chats, don't bother sending a digest
-			if (!unreadNotifs.length &&
-				!topics.top.length && !topics.popular.length && !topics.recent.length &&
-				!publicRooms.length) {
+			const noNotifs = unreadNotifs.length === 0;
+			const noTop = topics.top.length === 0;
+			const noPopular = topics.popular.length === 0;
+			const noRecent = topics.recent.length === 0;
+			const noRooms = publicRooms.length === 0;
+			
+
+			
+			if ([noNotifs, noTop, noPopular, noRecent, noRooms].every(Boolean)) {
 				return;
 			}
 
